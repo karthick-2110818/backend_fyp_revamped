@@ -38,7 +38,7 @@ function broadcastUpdate() {
 function getCurrentProducts() {
     return Object.entries(products)
         .filter(([_, product]) => product.weight >= 2 && product.price >= 0)
-        .map(([name, details]) => ({ name, ...details }));  
+        .map(([name, details]) => ({ name, ...details }));
 }
 
 // **[2] Product Addition or Update**
