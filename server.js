@@ -7,12 +7,13 @@ const app = express();
 app.use(bodyParser.json());
 app.use(cors());
 
+let products = {};  // Stores product data
+let clients = [];   // Stores connected SSE clients
+const weightThreshold = 5; // Weight change threshold (grams)
+
 // Load environment variables from Render
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_EMAIL_PASS = process.env.ADMIN_EMAIL_PASS;
-
-let products = {};  // Stores product data
-let clients = [];   // Stores connected SSE clients
 
 // **[1] SSE Endpoint for Real-Time Updates**
 app.get('/stream-products', (req, res) => {
@@ -38,7 +39,7 @@ function broadcastUpdate() {
 function getCurrentProducts() {
     return Object.entries(products)
         .filter(([_, product]) => product.weight >= 2 && product.price >= 0)
-        .map(([name, details]) => ({ name, ...details }));
+        .map(([name, details]) => ({ name, ...details }));  
 }
 
 // **[2] Product Addition or Update**
@@ -50,7 +51,7 @@ app.post('/product', (req, res) => {
 
     if (products[name]) {
         const prevWeight = products[name].weight;
-        if (Math.abs(weight - prevWeight) > 5) {
+        if (Math.abs(weight - prevWeight) > weightThreshold) {
             products[name] = { weight, price, freshness };
             broadcastUpdate();
             return res.status(200).json({ message: 'Product updated successfully' });
@@ -93,29 +94,71 @@ app.post('/confirm-payment', (req, res) => {
         .catch(err => res.status(500).json({ error: 'Error sending receipt', details: err.message }));
 });
 
-// **[6] Digital Receipt Generation & Email Sending**
+// **[6] Digital Receipt Generation & Email Sending (in Table Form)**
 async function sendReceipt(email) {
-    const receiptText = `Thank you for your purchase! Here are your details:\n\n` +
-        getCurrentProducts().map(p => `${p.name}: ₹${p.price}`).join("\n");
+    const productsList = getCurrentProducts();
+    const totalAmount = productsList.reduce((sum, p) => sum + p.price, 0).toFixed(2);
 
-    let transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-            user: ADMIN_EMAIL,
-            pass: ADMIN_EMAIL_PASS
-        }
+    // Construct the HTML table for the receipt
+    let tableContent = productsList.map(p => `
+        <tr>
+            <td>${p.name}</td>
+            <td>${p.weight}g</td>
+            <td>₹${p.price.toFixed(2)}</td>
+        </tr>
+    `).join('');
+
+    const receiptHTML = `
+        <h2>Thank you for your purchase! Here are your details:</h2>
+        <table border="1" cellpadding="10" cellspacing="0" style="border-collapse: collapse; width: 100%; text-align: left;">
+            <thead>
+                <tr>
+                    <th>Product Name</th>
+                    <th>Weight (g)</th>
+                    <th>Price (₹)</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${tableContent}
+            </tbody>
+        </table>
+        <h3>Total: ₹${totalAmount}</h3>
+    `;
+
+    const transporter = nodemailer.createTransport({
+        service: 'Gmail',
+        auth: { user: ADMIN_EMAIL, pass: ADMIN_EMAIL_PASS }
     });
 
     await transporter.sendMail({
         from: ADMIN_EMAIL,
         to: email,
-        subject: 'Your Digital Receipt',
-        text: receiptText
+        subject: "Your Autonomous Checkout Receipt",
+        html: receiptHTML // Send the HTML content as email
     });
+
+    console.log(`📧 Receipt sent to ${email}`);
 }
 
-// **Start Server**
+// **[7] Store Customer Satisfaction Rating**
+app.post('/store-rating', (req, res) => {
+    const { rating } = req.body;
+
+    if (!rating || !['😞', '😐', '😊'].includes(rating)) {
+        return res.status(400).json({ error: 'Invalid rating.' });
+    }
+
+    // Store the rating in Google Sheets or a database (for now, we will simulate this by printing it)
+    console.log(`Received rating: ${rating}`);
+
+    // Optionally, you could store this in Google Sheets using Google Apps Script
+    // For now, we'll just respond with a success message
+
+    return res.status(200).json({ message: 'Rating stored successfully.' });
+});
+
+// **Start the Server on Render**
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`🚀 Server running on port ${PORT}`);
 });
