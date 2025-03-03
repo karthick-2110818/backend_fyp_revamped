@@ -2,7 +2,6 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const nodemailer = require('nodemailer'); // For sending digital receipts
-const { google } = require('googleapis'); // For Google Sheets Integration
 
 const app = express();
 app.use(bodyParser.json());
@@ -15,9 +14,6 @@ const weightThreshold = 5; // Weight change threshold (grams)
 // Load environment variables from Render
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_EMAIL_PASS = process.env.ADMIN_EMAIL_PASS;
-const GOOGLE_SHEETS_ID = process.env.GOOGLE_SHEETS_ID;
-const GOOGLE_SERVICE_ACCOUNT = process.env.GOOGLE_SERVICE_ACCOUNT;
-const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n');
 
 // **[1] SSE Endpoint for Real-Time Updates**
 app.get('/stream-products', (req, res) => {
@@ -118,37 +114,6 @@ async function sendReceipt(email) {
 
     console.log(`📧 Receipt sent to ${email}`);
 }
-
-// **[7] Store Customer Experience Ratings in Google Sheets**
-app.post('/feedback', async (req, res) => {
-    const { rating } = req.body;
-    if (!rating || !['Sad', 'Neutral', 'Happy'].includes(rating)) {
-        return res.status(400).json({ error: 'Invalid rating' });
-    }
-
-    try {
-        const auth = new google.auth.JWT(
-            GOOGLE_SERVICE_ACCOUNT,
-            null,
-            GOOGLE_PRIVATE_KEY,
-            ['https://www.googleapis.com/auth/spreadsheets']
-        );
-
-        const sheets = google.sheets({ version: 'v4', auth });
-        await sheets.spreadsheets.values.append({
-            spreadsheetId: GOOGLE_SHEETS_ID,
-            range: "Feedback!A1",
-            valueInputOption: "RAW",
-            insertDataOption: "INSERT_ROWS",
-            requestBody: { values: [[new Date().toISOString(), rating]] }
-        });
-
-        res.status(200).json({ message: 'Feedback stored successfully' });
-    } catch (error) {
-        console.error("Error saving feedback:", error);
-        res.status(500).json({ error: 'Failed to store feedback' });
-    }
-});
 
 // **Start the Server on Render**
 const PORT = process.env.PORT || 10000;
