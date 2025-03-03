@@ -39,7 +39,7 @@ function broadcastUpdate() {
 function getCurrentProducts() {
     return Object.entries(products)
         .filter(([_, product]) => product.weight >= 2 && product.price >= 0)
-        .map(([name, details]) => ({ name, ...details }));  
+        .map(([name, details]) => ({ name, ...details }));
 }
 
 // **[2] Product Addition or Update**
@@ -96,10 +96,37 @@ app.post('/confirm-payment', (req, res) => {
 
 // **[6] Digital Receipt Generation & Email Sending**
 async function sendReceipt(email) {
-    const receiptText = `Thank you for your purchase! Here are your details:\n\n` +
-        getCurrentProducts().map(p => `${p.name}: ₹${p.price.toFixed(2)} (${p.weight}g)`).join("\n") +
-        `\n\nTotal: ₹${getCurrentProducts().reduce((sum, p) => sum + p.price, 0).toFixed(2)}`;
+    // Generate HTML content for the receipt
+    const productsList = getCurrentProducts();
+    const productRows = productsList.map(p => `
+        <tr>
+            <td>${p.name}</td>
+            <td>₹${p.price.toFixed(2)}</td>
+            <td>${p.weight}g</td>
+        </tr>
+    `).join('');
 
+    const totalAmount = productsList.reduce((sum, p) => sum + p.price, 0).toFixed(2);
+
+    const receiptHtml = `
+        <h3>Thank you for your purchase!</h3>
+        <p>Here are your purchase details:</p>
+        <table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse;">
+            <thead>
+                <tr>
+                    <th>Product</th>
+                    <th>Price</th>
+                    <th>Weight</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${productRows}
+            </tbody>
+        </table>
+        <h4>Total: ₹${totalAmount}</h4>
+    `;
+
+    // Send email with HTML content
     const transporter = nodemailer.createTransport({
         service: 'Gmail',
         auth: { user: ADMIN_EMAIL, pass: ADMIN_EMAIL_PASS }
@@ -109,14 +136,14 @@ async function sendReceipt(email) {
         from: ADMIN_EMAIL,
         to: email,
         subject: "Your Autonomous Checkout Receipt",
-        text: receiptText
+        html: receiptHtml
     });
 
     console.log(`📧 Receipt sent to ${email}`);
 }
 
 // **Start the Server on Render**
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 });
