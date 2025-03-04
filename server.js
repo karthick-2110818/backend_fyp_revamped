@@ -81,25 +81,30 @@ app.delete('/product/:name', (req, res) => {
     return res.status(404).json({ error: `Product ${name} not found.` });
 });
 
-// **[5] Payment Confirmation Endpoint**
-app.post('/confirm-payment', (req, res) => {
+// **[5] Payment Confirmation Endpoint (FIXED)**
+app.post('/confirm-payment', async (req, res) => {
     const { email } = req.body;
 
     if (!email) {
         return res.status(400).json({ error: 'Email is required for receipt.' });
     }
 
-    sendReceipt(email)
-        .then(() => res.status(200).json({ message: 'Payment confirmed, receipt sent.' }))
-        .catch(err => res.status(500).json({ error: 'Error sending receipt', details: err.message }));
+    try {
+        await sendReceipt(email);
+        return res.status(200).json({
+            message: 'Payment confirmed, receipt sent.',
+            redirectUrl: '/payment_success.html'  // **Frontend should use this to redirect**
+        });
+    } catch (err) {
+        return res.status(500).json({ error: 'Error sending receipt', details: err.message });
+    }
 });
 
-// **[6] Digital Receipt Generation & Email Sending (in Table Form)**
+// **[6] Digital Receipt Generation & Email Sending**
 async function sendReceipt(email) {
     const productsList = getCurrentProducts();
     const totalAmount = productsList.reduce((sum, p) => sum + p.price, 0).toFixed(2);
 
-    // Construct the HTML table for the receipt
     let tableContent = productsList.map(p => `
         <tr>
             <td>${p.name}</td>
@@ -134,30 +139,26 @@ async function sendReceipt(email) {
         from: ADMIN_EMAIL,
         to: email,
         subject: "Your Autonomous Checkout Receipt",
-        html: receiptHTML // Send the HTML content as email
+        html: receiptHTML
     });
 
     console.log(`📧 Receipt sent to ${email}`);
 }
 
 // **[7] Store Customer Satisfaction Rating**
-app.post('/store-rating', (req, res) => {
+app.post('/submit-rating', (req, res) => {
     const { rating } = req.body;
 
     if (!rating || !['😞', '😐', '😊'].includes(rating)) {
         return res.status(400).json({ error: 'Invalid rating.' });
     }
 
-    // Store the rating in Google Sheets or a database (for now, we will simulate this by printing it)
     console.log(`Received rating: ${rating}`);
-
-    // Optionally, you could store this in Google Sheets using Google Apps Script
-    // For now, we'll just respond with a success message
 
     return res.status(200).json({ message: 'Rating stored successfully.' });
 });
 
-// **Start the Server on Render**
+// **Start the Server**
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
