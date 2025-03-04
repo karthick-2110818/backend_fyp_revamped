@@ -1,21 +1,21 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const nodemailer = require('nodemailer'); // For sending digital receipts
+const nodemailer = require('nodemailer');
 
 const app = express();
 app.use(bodyParser.json());
 app.use(cors());
 
-let products = {};  // Stores product data
-let clients = [];   // Stores connected SSE clients
-const weightThreshold = 5; // Weight change threshold (grams)
+let products = {};  
+let clients = [];  
+const weightThreshold = 5;  
 
-// Load environment variables from Render
+// Load environment variables
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_EMAIL_PASS = process.env.ADMIN_EMAIL_PASS;
 
-// **[1] SSE Endpoint for Real-Time Updates**
+// **[1] SSE - Real-Time Updates**
 app.get('/stream-products', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -29,20 +29,18 @@ app.get('/stream-products', (req, res) => {
     });
 });
 
-// **Helper Function: Send Updates to All Connected Clients**
 function broadcastUpdate() {
     const data = JSON.stringify(getCurrentProducts());
     clients.forEach(client => client.write(`data: ${data}\n\n`));
 }
 
-// **Helper Function: Get Only Valid Products**
 function getCurrentProducts() {
     return Object.entries(products)
         .filter(([_, product]) => product.weight >= 2 && product.price >= 0)
         .map(([name, details]) => ({ name, ...details }));  
 }
 
-// **[2] Product Addition or Update**
+// **[2] Add or Update Product**
 app.post('/product', (req, res) => {
     const { name, weight, price, freshness } = req.body;
     if (!name || weight === undefined || price === undefined || !freshness) {
@@ -61,11 +59,11 @@ app.post('/product', (req, res) => {
     } else {
         products[name] = { weight, price, freshness };
         broadcastUpdate();
-        return res.status(200).json({ message: 'Product data received successfully' });
+        return res.status(200).json({ message: 'Product added successfully' });
     }
 });
 
-// **[3] Get Products for Checkout**
+// **[3] Get Products**
 app.get('/products', (req, res) => {
     res.status(200).json(getCurrentProducts());
 });
@@ -81,7 +79,7 @@ app.delete('/product/:name', (req, res) => {
     return res.status(404).json({ error: `Product ${name} not found.` });
 });
 
-// **[5] Payment Confirmation Endpoint (FIXED)**
+// **[5] Confirm Payment and Send Email Receipt**
 app.post('/confirm-payment', async (req, res) => {
     const { email } = req.body;
 
@@ -93,14 +91,14 @@ app.post('/confirm-payment', async (req, res) => {
         await sendReceipt(email);
         return res.status(200).json({
             message: 'Payment confirmed, receipt sent.',
-            redirectUrl: '/payment_success.html'  // **Frontend should use this to redirect**
+            redirectUrl: '/payment_success.html'
         });
     } catch (err) {
+        console.error("❌ Error sending receipt:", err.message);
         return res.status(500).json({ error: 'Error sending receipt', details: err.message });
     }
 });
 
-// **[6] Digital Receipt Generation & Email Sending**
 async function sendReceipt(email) {
     const productsList = getCurrentProducts();
     const totalAmount = productsList.reduce((sum, p) => sum + p.price, 0).toFixed(2);
@@ -114,18 +112,12 @@ async function sendReceipt(email) {
     `).join('');
 
     const receiptHTML = `
-        <h2>Thank you for your purchase! Here are your details:</h2>
-        <table border="1" cellpadding="10" cellspacing="0" style="border-collapse: collapse; width: 100%; text-align: left;">
+        <h2>Thank you for your purchase!</h2>
+        <table border="1" cellpadding="10" cellspacing="0" style="width: 100%; text-align: left;">
             <thead>
-                <tr>
-                    <th>Product Name</th>
-                    <th>Weight (g)</th>
-                    <th>Price (₹)</th>
-                </tr>
+                <tr><th>Product</th><th>Weight (g)</th><th>Price (₹)</th></tr>
             </thead>
-            <tbody>
-                ${tableContent}
-            </tbody>
+            <tbody>${tableContent}</tbody>
         </table>
         <h3>Total: ₹${totalAmount}</h3>
     `;
@@ -145,20 +137,17 @@ async function sendReceipt(email) {
     console.log(`📧 Receipt sent to ${email}`);
 }
 
-// **[7] Store Customer Satisfaction Rating**
+// **[6] Store Customer Feedback**
 app.post('/submit-rating', (req, res) => {
     const { rating } = req.body;
-
-    if (!rating || !['😞', '😐', '😊'].includes(rating)) {
+    if (!['😞', '😐', '😊'].includes(rating)) {
         return res.status(400).json({ error: 'Invalid rating.' });
     }
-
     console.log(`Received rating: ${rating}`);
-
-    return res.status(200).json({ message: 'Rating stored successfully.' });
+    return res.status(200).json({ message: 'Thank you for your feedback!' });
 });
 
-// **Start the Server**
+// **Start Server**
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
